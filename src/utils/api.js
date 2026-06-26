@@ -1,5 +1,4 @@
 // src/utils/api.js
-// Thin wrappers around the Vercel API routes
 
 const BASE = '/api';
 
@@ -13,7 +12,7 @@ async function request(path, options = {}) {
   return data;
 }
 
-// Providers
+// ── Providers ──────────────────────────────────────────────────────────────
 export const fetchProviders = () => request('/providers');
 
 export const saveProvider = (pin, provider) =>
@@ -28,16 +27,42 @@ export const deleteProvider = (pin, id) =>
     body: JSON.stringify({ pin, id }),
   });
 
-// Admin PIN
+// ── Admin PIN ──────────────────────────────────────────────────────────────
 export const verifyPin = (pin) =>
   request('/verify-pin', {
     method: 'POST',
     body: JSON.stringify({ pin }),
   });
 
-// LLM Extraction
+// ── LLM Extraction ─────────────────────────────────────────────────────────
 export const extractFields = (notes) =>
   request('/extract', {
     method: 'POST',
     body: JSON.stringify({ notes }),
   });
+
+// ── PDF Generation ─────────────────────────────────────────────────────────
+// Calls Python serverless function to fill the actual CCO CBCRP PDF
+// Section 2 (PHI) is left blank — physician completes manually
+export const generatePDF = async (provider, formData) => {
+  const res = await fetch(`${BASE}/generate_pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, formData }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `PDF generation failed (${res.status})`);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'CBCRP_Request_Form_Prefilled.pdf';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};

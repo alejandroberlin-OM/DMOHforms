@@ -1,12 +1,12 @@
 // src/constants.js
-// UHN / Princess Margaret Cancer Centre colour palette
+// UHN / Princess Margaret Cancer Centre colour palette + shared state
 
 export const C = {
-  navy: '#002B5C',       // UHN Primary Navy
+  navy: '#002B5C',
   navyDark: '#001A3D',
-  gold: '#FFD100',       // UHN Gold
+  gold: '#FFD100',
   goldDark: '#C9A800',
-  blue: '#0067C5',       // UHN Secondary Blue
+  blue: '#0067C5',
   blueLight: '#E8F2FB',
   bg: '#F2F5FA',
   white: '#FFFFFF',
@@ -40,9 +40,8 @@ export const EMPTY_FORM = {
   fundingMfr: false, fundingMfrOut: '',
   fundingHosp: false,
   currentFunding: 'No', currentFundingDetail: '',
-  // Section 5 (pre-section question n)
-  clinicalTrialN: 'no_trials', clinicalTrialNOther: '',
   // Section 5
+  clinicalTrialN: 'no_trials', clinicalTrialNOther: '',
   cancerIncidence: '', ontarioEstimate: '', rareCircumstance: '',
   survivalWithout: '', survivalWith: '',
   whyOthersNA: '', expectedBenefits: '',
@@ -61,9 +60,22 @@ export const EMPTY_FORM = {
   dateCompleted: new Date().toISOString().slice(0, 10),
 };
 
+// Expanded provider fields
 export const EMPTY_PROVIDER = {
-  id: '', firstName: '', lastName: '', specialty: '',
-  cpso: '', tel: '', fax: '', email: '', hospital: '',
+  id: '',
+  firstName: '',
+  lastName: '',
+  specialty: '',          // e.g. "Medical Oncology, Hematology"
+  cpso: '',
+  billingNumber: '',      // OHIP billing number
+  tel: '',
+  fax: '',
+  email: '',
+  hospital: '',
+  address: '',            // Clinic / office address
+  city: '',
+  province: 'ON',
+  postalCode: '',
 };
 
 export const makeUid = uid;

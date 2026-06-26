@@ -1,44 +1,52 @@
 // src/App.jsx
 import { useState, useEffect } from 'react';
 import { C, EMPTY_FORM, makeUid } from './constants.js';
-import { fetchProviders, extractFields } from './utils/api.js';
-import { generatePrintHTML } from './utils/printHTML.js';
+import { fetchProviders, extractFields, generatePDF } from './utils/api.js';
 import DisclaimerModal from './components/DisclaimerModal.jsx';
 import Header from './components/Header.jsx';
 import StepBar from './components/StepBar.jsx';
 import StepProviders from './components/StepProviders.jsx';
 import StepNotes from './components/StepNotes.jsx';
 import StepReview from './components/StepReview.jsx';
+import Landing from './pages/Landing.jsx';
 
 export default function App() {
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
+  const [page, setPage] = useState('landing');   // 'landing' | 'cbcrp'
   const [step, setStep] = useState(1);
   const [providers, setProviders] = useState([]);
   const [selectedProvider, setSelectedProvider] = useState(null);
   const [notes, setNotes] = useState('');
   const [formData, setFormData] = useState({ ...EMPTY_FORM });
   const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [loadingProviders, setLoadingProviders] = useState(true);
   const [error, setError] = useState('');
+  const [pdfError, setPdfError] = useState('');
 
-  // Show disclaimer every session
+  // Disclaimer — once per session
   useEffect(() => {
-    const accepted = sessionStorage.getItem('dmoh_disclaimer_accepted');
-    if (accepted === 'true') setDisclaimerAccepted(true);
+    if (sessionStorage.getItem('dmoh_disclaimer_v2') === 'true') {
+      setDisclaimerAccepted(true);
+    }
   }, []);
 
   const handleDisclaimerAccept = () => {
-    sessionStorage.setItem('dmoh_disclaimer_accepted', 'true');
+    sessionStorage.setItem('dmoh_disclaimer_v2', 'true');
     setDisclaimerAccepted(true);
   };
 
-  // Load providers from API on mount
+  // Load providers on mount
   useEffect(() => {
     fetchProviders()
       .then(setProviders)
       .catch(err => console.error('Could not load providers:', err))
       .finally(() => setLoadingProviders(false));
   }, []);
+
+  const handleSelectForm = (formId) => {
+    if (formId === 'cbcrp') setPage('cbcrp');
+  };
 
   const handleSelectProvider = (p) => {
     setSelectedProvider(p);
@@ -66,21 +74,26 @@ export default function App() {
     }
   };
 
-  const handlePrint = () => {
-    const html = generatePrintHTML(selectedProvider, formData);
-    const win = window.open('', '_blank');
-    if (!win) { alert('Please allow pop-ups for this site to download the form.'); return; }
-    win.document.write(html);
-    win.document.close();
-    setTimeout(() => win.print(), 600);
+  // Download the actual filled CCO PDF (Section 2 / PHI left blank)
+  const handleDownloadPDF = async () => {
+    setPdfLoading(true); setPdfError('');
+    try {
+      await generatePDF(selectedProvider, formData);
+    } catch (e) {
+      setPdfError(e.message || 'PDF generation failed. Please try again.');
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
   const handleReset = () => {
+    setPage('landing');
     setStep(1);
     setSelectedProvider(null);
     setNotes('');
     setFormData({ ...EMPTY_FORM });
     setError('');
+    setPdfError('');
   };
 
   if (loadingProviders) return (
@@ -89,49 +102,68 @@ export default function App() {
     </div>
   );
 
+  const isFormPage = page !== 'landing';
+
   return (
     <div style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", background: C.bg, minHeight: '100vh', color: C.text }}>
       {!disclaimerAccepted && <DisclaimerModal onAccept={handleDisclaimerAccept} />}
 
-      <Header step={step} onReset={handleReset} />
-      <StepBar step={step} />
+      <Header step={isFormPage ? step : 0} onReset={handleReset} showBack={isFormPage} />
 
-      <main style={{ maxWidth: 900, margin: '0 auto', padding: '28px 16px 60px' }}>
-        {step === 1 && (
-          <StepProviders
+      {isFormPage && <StepBar step={step} />}
+
+      <main>
+        {/* Landing page */}
+        {page === 'landing' && (
+          <Landing
+            onSelectForm={handleSelectForm}
             providers={providers}
             setProviders={setProviders}
-            onSelect={handleSelectProvider}
           />
         )}
-        {step === 2 && (
-          <StepNotes
-            provider={selectedProvider}
-            notes={notes}
-            setNotes={setNotes}
-            onExtract={handleExtract}
-            loading={loading}
-            error={error}
-          />
-        )}
-        {step === 3 && (
-          <StepReview
-            provider={selectedProvider}
-            formData={formData}
-            setFormData={setFormData}
-            onPrint={handlePrint}
-          />
+
+        {/* CBCRP form workflow */}
+        {page === 'cbcrp' && (
+          <div style={{ maxWidth: 900, margin: '0 auto', padding: '28px 16px 60px' }}>
+            {step === 1 && (
+              <StepProviders
+                providers={providers}
+                setProviders={setProviders}
+                onSelect={handleSelectProvider}
+              />
+            )}
+            {step === 2 && (
+              <StepNotes
+                provider={selectedProvider}
+                notes={notes}
+                setNotes={setNotes}
+                onExtract={handleExtract}
+                loading={loading}
+                error={error}
+              />
+            )}
+            {step === 3 && (
+              <StepReview
+                provider={selectedProvider}
+                formData={formData}
+                setFormData={setFormData}
+                onDownloadPDF={handleDownloadPDF}
+                pdfLoading={pdfLoading}
+                pdfError={pdfError}
+              />
+            )}
+          </div>
         )}
       </main>
 
       {/* Footer */}
-      <footer style={{ borderTop: `3px solid ${C.navy}`, background: C.white, padding: '14px 24px', textAlign: 'center' }}>
+      <footer style={{ borderTop: `3px solid ${C.navy}`, background: C.white, padding: '12px 24px' }}>
         <div style={{ height: 2, background: C.gold, marginBottom: 10 }} />
-        <p style={{ fontSize: 11, color: C.muted, lineHeight: 1.7, maxWidth: 700, margin: '0 auto' }}>
-          <strong>DMOH Clinical Form Assistant</strong> — Personal Productivity Tool &nbsp;|&nbsp;
+        <p style={{ fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 1.7, maxWidth: 700, margin: '0 auto' }}>
+          <strong>DMOH Form Assistant</strong> — Personal Productivity Tool &nbsp;|&nbsp;
           Not an official UHN or Ontario Health product &nbsp;|&nbsp;
-          AI-generated content must be verified by the treating physician before submission &nbsp;|&nbsp;
-          Data processed under Anthropic BAA &nbsp;|&nbsp; No PHI stored
+          AI content must be verified by treating physician before submission &nbsp;|&nbsp;
+          Anthropic BAA in place &nbsp;|&nbsp; No PHI stored
         </p>
       </footer>
     </div>
