@@ -1,6 +1,9 @@
 // src/utils/api.js
+// Providers stored in browser localStorage — persists across sessions, no KV needed
+// PIN still validated server-side before any add/edit/delete
 
 const BASE = '/api';
+const PROV_KEY = 'dmoh_providers_v2';
 
 async function request(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
@@ -12,50 +15,58 @@ async function request(path, options = {}) {
   return data;
 }
 
-// ── Providers ──────────────────────────────────────────────────────────────
-export const fetchProviders = () => request('/providers');
+// ── Providers (localStorage) ───────────────────────────────────────────────
+export const fetchProviders = async () => {
+  try {
+    const stored = localStorage.getItem(PROV_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
 
-export const saveProvider = (pin, provider) =>
-  request('/providers', {
-    method: 'POST',
-    body: JSON.stringify({ pin, provider }),
-  });
+export const saveProvider = async (pin, provider) => {
+  // Validate PIN server-side first
+  await request('/verify-pin', { method: 'POST', body: JSON.stringify({ pin }) });
 
-export const deleteProvider = (pin, id) =>
-  request('/providers', {
-    method: 'DELETE',
-    body: JSON.stringify({ pin, id }),
-  });
+  const providers = await fetchProviders();
+  const exists = providers.find(p => p.id === provider.id);
+  const updated = exists
+    ? providers.map(p => p.id === provider.id ? provider : p)
+    : [...providers, { ...provider, id: Date.now().toString() }];
+
+  localStorage.setItem(PROV_KEY, JSON.stringify(updated));
+  return updated;
+};
+
+export const deleteProvider = async (pin, id) => {
+  await request('/verify-pin', { method: 'POST', body: JSON.stringify({ pin }) });
+
+  const providers = await fetchProviders();
+  const updated = providers.filter(p => p.id !== id);
+  localStorage.setItem(PROV_KEY, JSON.stringify(updated));
+  return updated;
+};
 
 // ── Admin PIN ──────────────────────────────────────────────────────────────
 export const verifyPin = (pin) =>
-  request('/verify-pin', {
-    method: 'POST',
-    body: JSON.stringify({ pin }),
-  });
+  request('/verify-pin', { method: 'POST', body: JSON.stringify({ pin }) });
 
 // ── LLM Extraction ─────────────────────────────────────────────────────────
 export const extractFields = (notes) =>
-  request('/extract', {
-    method: 'POST',
-    body: JSON.stringify({ notes }),
-  });
+  request('/extract', { method: 'POST', body: JSON.stringify({ notes }) });
 
 // ── PDF Generation ─────────────────────────────────────────────────────────
-// Calls Python serverless function to fill the actual CCO CBCRP PDF
-// Section 2 (PHI) is left blank — physician completes manually
 export const generatePDF = async (provider, formData) => {
   const res = await fetch(`${BASE}/generate_pdf`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ provider, formData }),
   });
-
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `PDF generation failed (${res.status})`);
   }
-
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
