@@ -1,10 +1,5 @@
 {
   "framework": "vite",
   "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "functions": {
-    "api/generate_pdf.py": {
-      "runtime": "python3.9"
-    }
-  }
+  "outputDirectory": "dist"
 }
