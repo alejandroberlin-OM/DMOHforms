@@ -1,4 +1,5 @@
 // src/App.jsx
+// Updated: manages drugName state, passes to StepNotes and extractFields
 import { useState, useEffect } from 'react';
 import { C, EMPTY_FORM, makeUid } from './constants.js';
 import { fetchProviders, extractFields, generatePDF } from './utils/api.js';
@@ -12,10 +13,11 @@ import Landing from './pages/Landing.jsx';
 
 export default function App() {
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
-  const [page, setPage] = useState('landing');   // 'landing' | 'cbcrp'
+  const [page, setPage] = useState('landing');
   const [step, setStep] = useState(1);
   const [providers, setProviders] = useState([]);
   const [selectedProvider, setSelectedProvider] = useState(null);
+  const [drugName, setDrugName] = useState('');       // ← new: drug name state
   const [notes, setNotes] = useState('');
   const [formData, setFormData] = useState({ ...EMPTY_FORM });
   const [loading, setLoading] = useState(false);
@@ -24,7 +26,6 @@ export default function App() {
   const [error, setError] = useState('');
   const [pdfError, setPdfError] = useState('');
 
-  // Disclaimer — once per session
   useEffect(() => {
     if (sessionStorage.getItem('dmoh_disclaimer_v2') === 'true') {
       setDisclaimerAccepted(true);
@@ -36,7 +37,6 @@ export default function App() {
     setDisclaimerAccepted(true);
   };
 
-  // Load providers on mount
   useEffect(() => {
     fetchProviders()
       .then(setProviders)
@@ -54,11 +54,13 @@ export default function App() {
     setError('');
   };
 
+  // Pass drugName to extractFields — AI uses it to tailor the entire form
   const handleExtract = async () => {
     if (!notes.trim()) { setError('Please paste clinical notes first.'); return; }
+    if (!drugName.trim()) { setError('Please enter the requested drug name first.'); return; }
     setLoading(true); setError('');
     try {
-      const { fields } = await extractFields(notes);
+      const { fields } = await extractFields(notes, drugName);
       setFormData({
         ...EMPTY_FORM,
         ...fields,
@@ -74,7 +76,6 @@ export default function App() {
     }
   };
 
-  // Download the actual filled CCO PDF (Section 2 / PHI left blank)
   const handleDownloadPDF = async () => {
     setPdfLoading(true); setPdfError('');
     try {
@@ -90,6 +91,7 @@ export default function App() {
     setPage('landing');
     setStep(1);
     setSelectedProvider(null);
+    setDrugName('');
     setNotes('');
     setFormData({ ...EMPTY_FORM });
     setError('');
@@ -109,11 +111,9 @@ export default function App() {
       {!disclaimerAccepted && <DisclaimerModal onAccept={handleDisclaimerAccept} />}
 
       <Header step={isFormPage ? step : 0} onReset={handleReset} showBack={isFormPage} />
-
       {isFormPage && <StepBar step={step} />}
 
       <main>
-        {/* Landing page */}
         {page === 'landing' && (
           <Landing
             onSelectForm={handleSelectForm}
@@ -122,7 +122,6 @@ export default function App() {
           />
         )}
 
-        {/* CBCRP form workflow */}
         {page === 'cbcrp' && (
           <div style={{ maxWidth: 900, margin: '0 auto', padding: '28px 16px 60px' }}>
             {step === 1 && (
@@ -135,6 +134,8 @@ export default function App() {
             {step === 2 && (
               <StepNotes
                 provider={selectedProvider}
+                drugName={drugName}
+                setDrugName={setDrugName}
                 notes={notes}
                 setNotes={setNotes}
                 onExtract={handleExtract}
@@ -156,7 +157,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer */}
       <footer style={{ borderTop: `3px solid ${C.navy}`, background: C.white, padding: '12px 24px' }}>
         <div style={{ height: 2, background: C.gold, marginBottom: 10 }} />
         <p style={{ fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 1.7, maxWidth: 700, margin: '0 auto' }}>
